@@ -8,6 +8,7 @@ currentv=$(curl -s https://raw.githubusercontent.com/sdparekh/zUMIs/main/zUMIs.s
 if [ "$currentv" != "$vers" ] ; then
     echo -e "------------- \n\n Good news! A newer version of zUMIs is available at https://github.com/sdparekh/zUMIs \n\n-------------";
 fi
+echo "running adapted version of zUMIs "
 
 function check_opts() {
     value=$1

@@ -115,13 +115,10 @@ param_misc <- paste("--genomeDir",inp$reference$STAR_index,
                     "--readFilesType SAM",inp$read_layout)
 
 STAR_command <- paste(STAR_exec,param_defaults,param_misc,inp$reference$additional_STAR_params,param_additional_fa)
-if(inp$counting_opts$twoPass==TRUE){
-  STAR_command <- paste(STAR_command,"--twopassMode Basic")
-}
 
 #finally, run STAR
 if(num_star_instances>1 & inp$which_Stage == "Filtering"){
-  map_tmp_dir <- paste0(inp$out_dir,"/zUMIs_output/.tmpMap/")
+  map_tmp_dir <- paste0(inp$out_dir,"/zUMIs_output/.tmpMap1/")
   dir.create(path = map_tmp_dir,showWarnings = FALSE)
   input_split <- split(filtered_bams, ceiling(seq_along(filtered_bams) / ceiling(length(filtered_bams) / num_star_instances)))
   input_split <- sapply(input_split, paste0, collapse = ",")
@@ -132,7 +129,34 @@ if(num_star_instances>1 & inp$which_Stage == "Filtering"){
       "--outFileNamePrefix",paste0(map_tmp_dir,"/tmp.",inp$project,".",x,"."))
   })
   STAR_command <- paste(unlist(STAR_command), collapse = " & ")
-  system(paste(STAR_command,"&",sammerge_command,"& wait"))
+  system(paste(STAR_command,"&wait"))
+  
+  #implement STAR 2 pass mapping ourselves: intermediate SJ.out.tab files available
+  if(inp$counting_opts$twoPass==TRUE){
+    print("STAR: pass 2")
+    #get SJ files from first pass
+    dir.create(path = paste0(inp$out_dir, "/pass1"))
+    out_sjs <- list.files(map_tmp_dir, pattern = paste0("tmp.",inp$project,".*.SJ.out.tab"), full = TRUE)
+    copy_sjs <- paste("cp",paste0(map_tmp_dir,"/tmp.",inp$project,".*.SJ.out.tab"),paste0(inp$out_dir,"/pass1/"))
+    system(copy_sjs)
+    STAR_preset <- paste(STAR_preset,"--sjdbFileChrStartEnd ", paste(out_sjs, collapse = " "))
+    map_tmp_dir1 <- map_tmp_dir
+    
+    #STAR 2nd pass
+    map_tmp_dir <- paste0(inp$out_dir,"/zUMIs_output/.tmpMap2/")
+    dir.create(path = map_tmp_dir,showWarnings = FALSE)
+    STAR_command <- lapply(seq(num_star_instances), function(x){
+    paste(STAR_preset,
+      "--readFilesIn",input_split[x],
+      "--outFileNamePrefix",paste0(map_tmp_dir,"/tmp.",inp$project,".",x,"."))
+    })
+    STAR_command <- paste(unlist(STAR_command), collapse = " & ")
+    system(paste(STAR_command,"& wait"))
+    
+    #remove results first pass
+    system(paste0("rm -r ", map_tmp_dir1, "tmp.", inp$project, ".*"))
+  }
+  system(paste(sammerge_command,"& wait")) 
   
   #after parallel instance STAR, collect output data in the usual file places
   out_sjs <- list.files(map_tmp_dir, pattern = paste0("tmp.",inp$project,".*.SJ.out.tab"), full = TRUE)
@@ -147,16 +171,62 @@ if(num_star_instances>1 & inp$which_Stage == "Filtering"){
   system(paste(merge_logs,"&",merge_bams,"&",merge_txbams,"& wait"))
   system(paste0("rm -r ", map_tmp_dir, "tmp.", inp$project, ".*"))
 }else{
-  STAR_command <- paste(STAR_command,
-    "--readFilesIn",paste0(filtered_bams,collapse=","),
-    "--outFileNamePrefix",paste(inp$out_dir,"/",inp$project,".filtered.tagged.",sep="")
+  
+  map_tmp_dir <- paste0(inp$out_dir,"/zUMIs_output/.tmpMap1/")
+  dir.create(path = map_tmp_dir,showWarnings = FALSE)
+  
+  STAR_preset <- paste(STAR_command,
+    "--readFilesIn",paste0(filtered_bams,collapse=","))
+  STAR_command <- paste(STAR_preset,
+    "--outFileNamePrefix",paste0(map_tmp_dir,"/tmp.",inp$project,".")
   )
+  
   if(inp$which_Stage == "Filtering"){
     system(paste(STAR_command,"&",sammerge_command,"& wait"))
   }else{
     system(STAR_command)
   }
+  
+  if(inp$counting_opts$twoPass==TRUE){
+    print("STAR: pass 2")
+    dir.create(path = paste0(inp$out_dir, "/pass1"))
+    
+    copy_sj <- paste("cp", 
+       paste0(map_tmp_dir,"/tmp.",inp$project,".SJ.out.tab"), 
+       paste0(inp$out_dir,"/pass1/",inp$project,".filtered.tagged.SJ.out.tab"))
+    system(copy_sj)
+    
+    STAR_command <- paste(STAR_preset,
+      "--outFileNamePrefix",paste(inp$out_dir,"/",inp$project,".filtered.tagged.",sep=""),
+      "--sjdbFileChrStartEnd ", paste0(inp$out_dir,"/pass1/",inp$project,".filtered.tagged.SJ.out.tab"))
+     
+     system(STAR_command)
+      
+  }else{
+    copy_sj <- paste("cp", 
+       paste0(map_tmp_dir,"/tmp.",inp$project,".SJ.out.tab"), 
+       paste0(inp$out_dir,"/",inp$project,".filtered.tagged.SJ.out.tab"))
+    system(copy_sj)
+    
+    copy_txbam <- paste("cp",
+      paste0(map_tmp_dir, "/tmp.",inp$project,".Aligned.toTranscriptome.out.bam"),
+      paste0(inp$out_dir,"/",inp$project,".filtered.tagged.Aligned.toTranscriptome.out.bam"))
+    system(copy_txbam)
+    
+    copy_bam <- paste("cp", 
+      paste0(map_tmp_dir,"/tmp.",inp$project,".Aligned.out.bam"),
+      paste0(inp$out_dir,"/",inp$project,".filtered.tagged.Aligned.out.bam"))
+    system(copy_bam)
+    
+    copy_logs <- paste("cp", 
+       paste0(map_tmp_dir,"/tmp.",inp$project,".Log.final.out"), 
+       paste0(inp$out_dir,"/",inp$project,".filtered.tagged.Log.final.out"))
+    system(copy_logs)
+  }
+    
+  system(paste0("rm -r ", map_tmp_dir, "tmp.", inp$project, ".*")) #TODO uncomment
 }
+  
 
 
 #clean up chunked bam files

@@ -184,7 +184,6 @@ if(is.null(opt$read_layout)){
 
 ##########################################
 #set Downsampling ranges
-
 data.table::setDTthreads(threads=opt$num_threads)
 
 subS<-setDownSamplingOption( opt$counting_opts$downsampling,
@@ -222,7 +221,6 @@ for(i in unique(bccount$chunkID)){
                           subsample.splits=subS[which(max(bccount[chunkID==i]$n) >= subS[,1]), , drop = FALSE],
                           mapList=mapList
                         )
-
      if(i==1){
        allC<-tmp
     }else{

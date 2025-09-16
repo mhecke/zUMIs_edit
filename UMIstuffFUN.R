@@ -243,6 +243,10 @@ umiCollapseID<-function(reads,bccount,nmin=0,nmax=Inf,ftype=c("intron","exon"),.
       nret[is.na(readcount_internal), readcount_internal := 0]
     }
 
+    if (! "readcount_internal" %in% colnames(nret)){
+      nret$readcount_internal = 0
+    }
+
     return(nret)
   }
 }

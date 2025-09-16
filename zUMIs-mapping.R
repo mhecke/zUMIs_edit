@@ -224,7 +224,7 @@ if(num_star_instances>1 & inp$which_Stage == "Filtering"){
     system(copy_logs)
   }
     
-  system(paste0("rm -r ", map_tmp_dir, "tmp.", inp$project, ".*")) #TODO uncomment
+  system(paste0("rm -r ", map_tmp_dir, "tmp.", inp$project, ".*"))
 }
   
 
